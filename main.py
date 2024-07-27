@@ -1,8 +1,11 @@
 import pygame
+from pygame import mixer
 import os
 import random
 import csv
+import button
 
+mixer.init()
 pygame.init()
 
 screen_width = 1200
@@ -11,30 +14,32 @@ screen_height = 900
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption("Ninja")
 
-# frame rate
+"""frame rate"""
 clock = pygame.time.Clock()
 FPS = 60
 
-# diferite variabile ale jocului
+"""diferite variabile ale jocului"""
 gravity = 0.75
 scroll_thresh = 400
 rows = 16
 columns = 150
 tile_size = screen_height // rows
 tile_types = 25
+max_levels = 3
 screen_scroll = 1
 bg_scroll = 0
 level = 1
 start_game = False
+start_intro = False
 
-# variabile pentru actiunile playerilor
+"""variabile pentru actiunile playerilor"""
 moving_left = False
 moving_right = False
 shoot = False
 grenade = False
 grenade_thrown = False
 
-#adunam toate tile-urile intr-o lista
+"""adunam toate tile-urile intr-o lista"""
 img_list = []
 for x in range(tile_types):
     img = pygame.image.load(f'img/tile/{x}.png')
@@ -42,7 +47,19 @@ for x in range(tile_types):
     img_list.append(img)
 
 
-# incarcare imaginilor
+"""sunete si muzica din joc"""
+pygame.mixer.music.load('audio/music2.mp3')
+pygame.mixer.music.set_volume(0.03)
+pygame.mixer.music.play(-1, 0, 5000)
+jump_fx = pygame.mixer.Sound('audio/jump.wav')
+jump_fx.set_volume(0.05)
+shot_fx = pygame.mixer.Sound('audio/shot.wav')
+shot_fx.set_volume(0.05)
+grenade_fx = pygame.mixer.Sound('audio/grenade.wav')
+grenade_fx.set_volume(0.05)
+
+
+"""incarcare imaginilor"""
 bullet_img = pygame.image.load("img/player/0.png").convert_alpha()
 wave_img = pygame.image.load("img/icons/wave.png").convert_alpha()
 grenade_img = pygame.image.load("img/icons/grenade.png").convert_alpha()
@@ -52,7 +69,12 @@ grenade_box_img = pygame.image.load("img/icons/grenade.png").convert_alpha()
 arrow_img = pygame.image.load("img/icons/Icon29.png").convert_alpha()
 grenade_img_info = pygame.image.load("img/icons/grenade1.png").convert_alpha()
 
-# imaginile pentru backround
+"""imaginile cu butoanele din joc"""
+start_img = pygame.image.load("img/start_btn.png").convert_alpha()
+exit_img = pygame.image.load("img/exit_btn.png").convert_alpha()
+restart_img = pygame.image.load("img/restart_btn.png").convert_alpha()
+
+"""imaginile pentru backround"""
 pine1_img = pygame.image.load("img/background/pine1.png").convert_alpha()
 pine2_img = pygame.image.load("img/background/pine2.png").convert_alpha()
 mountain_img = pygame.image.load("img/background/mountain.png").convert_alpha()
@@ -65,15 +87,17 @@ item_boxes = {
     'Grenade': grenade_box_img
 }
 
-# Culoarea sau imaginile pentru backround
+"""Culoarea sau imaginile pentru backround"""
 BG = (50, 50, 50)
 red = (255, 0, 0)
 white = (255, 255, 255)
 green = (0, 255, 0)
 black = (0, 0, 0)
+pink = (235, 65, 54)
 
 
 def draw_text(text, font, text_col, x, y):
+    """Textul afisat in joc"""
     img = font.render(text, True, text_col)
     screen.blit(img, (x, y))
 
@@ -82,6 +106,7 @@ font = pygame.font.SysFont('Futura', 30)
 
 
 def draw_bg():
+    """Imaginile cu backround-ul, sunt facute sa se miste incet, in timp ce se misca playerul"""
     screen.fill(BG)
     width = sky_img.get_width()
     for x in range(7):
@@ -92,7 +117,26 @@ def draw_bg():
 
 
 
+def reset_level():
+    """Functia de reset level care ne ajuta sa restartam jocul odata ce murim"""
+    enemy_group.empty()
+    bullet_group.empty()
+    grenade_group.empty()
+    explosion_group.empty()
+    item_box_group.empty()
+    decoration_group.empty()
+    water_group.empty()
+    exit_group.empty()
+
+    data = []
+    for row in range(rows):
+        r = [-1] * columns
+        data.append(r)
+
+    return data
+
 class Ninja(pygame.sprite.Sprite):
+    """Constructorul main characterului si a inamicilor"""
     def __init__(self, char_type, x, y, scale, speed, ammo, grenades):
         pygame.sprite.Sprite.__init__(self)
         self.alive = True
@@ -121,7 +165,8 @@ class Ninja(pygame.sprite.Sprite):
         self.idling = False
         self.idling_counter = 0
 
-        # toate actiunile si imaginile playerului
+        """toate actiunile si imaginile playerului"""
+
         animation_types = ["idle", "run", "jump", "attack", "dead"]
         for animation in animation_types:
             temp_list = []
@@ -172,13 +217,13 @@ class Ninja(pygame.sprite.Sprite):
         delta_y += self.velocity_y
 
         for tile in world.obstacle_list:
-            # verificam coliziunile in directia x
+            """verificam coliziunile in directia x"""
             if tile[1].colliderect(self. rect.x + delta_x, self.rect.y, self.width, self.height):
                 delta_x = 0
                 if self.char_type == 'enemy':
                     self.direction *= -1
                     self.move_counter = 0
-            # verificam coliziunea in directia y
+            """verificam coliziunea in directia y"""
             if tile[1].colliderect(self.rect.x, self.rect.y + delta_y, self.width, self.height):
                 if self.velocity_y < 0:
                     self.velocity_y = 0
@@ -188,20 +233,33 @@ class Ninja(pygame.sprite.Sprite):
                     self.in_air = False
                     delta_y = tile[1].top - self.rect.bottom
 
+        if pygame.sprite.spritecollide(self, water_group, False):
+            self.health = 0
+
+        level_complete = False
+        if pygame.sprite.spritecollide(self, exit_group, False):
+            level_complete = True
+
+        if self.rect.bottom > screen_height:
+            self.health = 0
+
+
         if self.char_type == 'player':
             if self.rect.left + delta_x < 0 or self. rect. right + delta_x > screen_width:
                 delta_x = 0
 
         self.rect.x += delta_x
         self.rect.y += delta_y
-        #updatam miscarea ecranului dupa pozitia playerului
+
+        """updatam miscarea ecranului dupa pozitia playerului"""
+
         if self.char_type == 'player':
             if (self.rect.right > screen_width - scroll_thresh and bg_scroll < (world.level_leght * tile_size) - screen_width) \
                 or (self.rect.left < scroll_thresh and bg_scroll > abs(delta_x)):
                 self.rect.x -= delta_x
                 screen_scroll = -delta_x
 
-        return screen_scroll
+        return screen_scroll, level_complete
 
 
 
@@ -213,6 +271,7 @@ class Ninja(pygame.sprite.Sprite):
             bullet_group.add(bullet)
             self.ammo -= 1
             self.update_action(3)
+            shot_fx.play()
 
 
     def ai(self):
@@ -221,12 +280,11 @@ class Ninja(pygame.sprite.Sprite):
                 self.update_action(0)  # in timp ce inamicul sta, am updatat actiunea lui de a sta
                 self.idling = True
                 self.idling_counter = 50
-                # verifica daca AI vede playerul
 
+                # verifica daca AI vede playerul
             if self.vision.colliderect(player.rect):
                 # nu mai fuge si trage in player
                 self.update_action(0)
-                # AI trage in player
                 self.shoot()
             else:
                 if self.idling == False:
@@ -255,7 +313,7 @@ class Ninja(pygame.sprite.Sprite):
     def update_animation(self):
         animation_cooldowns = {
             0: 150,  # Idle
-            1: 150,  # Run
+            1: 100,  # Run
             2: 150,  # Jump
             3: 80,  # Attack
             4: 100  # Dead
@@ -313,7 +371,7 @@ class World():
                         water = Water(img, x * tile_size, y * tile_size)
                         water_group.add(water)
 
-                    elif tile >= 16 and tile <= 24:#decartiuni
+                    elif tile >= 17 and tile <= 24:#decartiuni
                         decoration = Decoration(img, x * tile_size, y * tile_size)
                         decoration_group.add(decoration)
 
@@ -338,8 +396,8 @@ class World():
                     elif tile == 15:#viata in plus
                         item_box = ItemBox('Health', x * tile_size, y * tile_size)
                         item_box_group.add(item_box)
-                    elif tile == 30:#urmatorul level
-                        exit = exit(img, x * tile_size, y * tile_size)
+                    elif tile == 16:#urmatorul level
+                        exit = Exit(img, x * tile_size, y * tile_size)
                         exit_group.add(exit)
 
 
@@ -383,6 +441,9 @@ class Exit(pygame.sprite.Sprite):
         self.image = img
         self.rect = self.image.get_rect()
         self.rect.midtop = (x + tile_size // 2, y + (tile_size - self.image.get_height()))
+
+    def update(self):
+        self.rect.x += screen_scroll
 
 
 
@@ -509,6 +570,7 @@ class Grenade(pygame.sprite.Sprite):
         self.timer -= 1
         if self.timer <= 0:
             self.kill()
+            grenade_fx.play()
             explosion = Explosion(self.rect.x, self.rect.y, 0.3)
             explosion_group.add(explosion)
 
@@ -548,6 +610,39 @@ class Explosion(pygame.sprite.Sprite):
             else:
                 self.image = self.images[self.frame_index]
 
+class ScreenFade():
+    def __init__(self, direction, colour, speed):
+        self.direction = direction
+        self.colour = colour
+        self.speed = speed
+        self.fade_counter = 0
+
+    def fade(self):
+        fade_complete = False
+        self.fade_counter += self.speed
+        if self.direction == 1:
+            pygame.draw.rect(screen, self.colour, (0 - self.fade_counter, 0, screen_width // 2, screen_height))
+            pygame.draw.rect(screen, self.colour, (screen_width // 2 + self.fade_counter, 0, screen_width, screen_height))
+            pygame.draw.rect(screen, self.colour, (0, 0 - self.fade_counter, screen_width, screen_height // 2))
+            pygame.draw.rect(screen, self.colour, (0, screen_height// 2 + self.fade_counter, screen_width, screen_height))
+        if self.direction == 2:
+            pygame.draw.rect(screen, self.colour, (0, 0, screen_width, 0 + self.fade_counter))
+        if self.fade_counter >= screen_width:
+            fade_complete = True
+
+        return fade_complete
+
+
+"""screen transition-urile"""
+intro_fade = ScreenFade(1, black, 4)
+death_fade = ScreenFade(2, pink, 4)
+
+#cream butoanele
+start_button = button.Button(screen_width // 2 - 130, screen_height // 2 - 150, start_img, 1)
+exit_button = button.Button(screen_width // 2 - 110, screen_height // 2 + 50, exit_img, 1)
+restart_button = button.Button(screen_width // 2 - 100, screen_height // 2 - 50, restart_img, 2)
+
+
 
 enemy_group = pygame.sprite.Group()
 bullet_group = pygame.sprite.Group()
@@ -584,70 +679,117 @@ player, health_bar = world.process_data(world_data)
 
 run = True
 while run:
+    """Main game loop"""
     clock.tick(FPS)
-    draw_bg()
-    world.draw()
-    health_bar.draw(player.health)
+    if start_game == False:
+        screen.fill(BG)
+        if start_button.draw(screen):
+            start_game = True
+            start_intro = True
 
-    # numarul de sageti
-    draw_text(f'Ammo: ', font, white, 10, 35)
-    for x in range(player.ammo):
-        screen.blit(arrow_img, (80 + (x * 10), 30))
+        if exit_button.draw(screen):
+            run = False
+    else:
 
-    # numarul de grenade
-    draw_text(f'Grenades: ', font, white, 10, 65)
-    for x in range(player.grenades):
-        screen.blit(grenade_img_info, (120 + (x * 15), 62))
+        draw_bg()
+        world.draw()
+        health_bar.draw(player.health)
 
-    if player.alive:
-        player.update()
-        player.draw()
+        # numarul de sageti
+        draw_text(f'Ammo: ', font, white, 10, 35)
+        for x in range(player.ammo):
+            screen.blit(arrow_img, (80 + (x * 10), 30))
 
-    for enemy in enemy_group:
-        enemy.ai()
-        enemy.update()
-        enemy.draw()
+        # numarul de grenade
+        draw_text(f'Grenades: ', font, white, 10, 65)
+        for x in range(player.grenades):
+            screen.blit(grenade_img_info, (120 + (x * 15), 62))
+
+        if player.alive:
+            player.update()
+            player.draw()
+
+        for enemy in enemy_group:
+            enemy.ai()
+            enemy.update()
+            enemy.draw()
 
 
-# update-urile pentru grupuei si afisarile pe ecran
-    bullet_group.update()
-    grenade_group.update()
-    explosion_group.update()
-    item_box_group.update()
-    decoration_group.update()
-    water_group.update()
-    exit_group.update()
+    # update-urile pentru grupuei si afisarile pe ecran
+        bullet_group.update()
+        grenade_group.update()
+        explosion_group.update()
+        item_box_group.update()
+        decoration_group.update()
+        water_group.update()
+        exit_group.update()
 
-    bullet_group.draw(screen)
-    grenade_group.draw(screen)
-    explosion_group.draw(screen)
-    item_box_group.draw(screen)
-    decoration_group.draw(screen)
-    water_group.draw(screen)
-    exit_group.draw(screen)
+        bullet_group.draw(screen)
+        grenade_group.draw(screen)
+        explosion_group.draw(screen)
+        item_box_group.draw(screen)
+        decoration_group.draw(screen)
+        water_group.draw(screen)
+        exit_group.draw(screen)
 
-    if player.alive:
-        # shooting
-        current_time = pygame.time.get_ticks()
 
-        if shoot:
-            player.shoot()
-        elif grenade and grenade_thrown == False and player.grenades > 0:
-            grenade = Grenade(player.rect.centerx + (0.5 * player.rect.size[0] * player.direction), player.rect.top,
-                              player.direction)
-            grenade_thrown = True
-            player.grenades -= 1
-            grenade_group.add(grenade)
-            player.update_action(3)  # 3 inseamna ATTACK
-        elif player.in_air:
-            player.update_action(2)  # 2 este JUMP
-        elif moving_left or moving_right:
-            player.update_action(1)  # 1 inseamna RUN
+        if start_intro == True:
+            if intro_fade.fade():
+                start_intro = False
+                intro_fade.fade_counter = 0
+
+        if player.alive:
+            # shooting
+            current_time = pygame.time.get_ticks()
+
+            if shoot:
+                player.shoot()
+            elif grenade and grenade_thrown == False and player.grenades > 0:
+                grenade = Grenade(player.rect.centerx + (0.5 * player.rect.size[0] * player.direction), player.rect.top,
+                                  player.direction)
+                grenade_thrown = True
+                player.grenades -= 1
+                grenade_group.add(grenade)
+                player.update_action(3)  # 3 inseamna ATTACK
+            elif player.in_air:
+                player.update_action(2)  # 2 este JUMP
+            elif moving_left or moving_right:
+                player.update_action(1)  # 1 inseamna RUN
+            else:
+                player.update_action(0)  # 0 inseamna IDLE
+
+            screen_scroll, level_complete = player.move(moving_left, moving_right)
+            print(level_complete)
+            bg_scroll -= screen_scroll
+            if level_complete:
+                start_intro = True
+                level += 1
+                bg_scroll = 0
+                world_data = reset_level()
+                if level <= max_levels:
+                    with open(f'level{level}_data.csv', newline='') as csvfile:
+                        reader = csv.reader(csvfile, delimiter=',')
+                        for x, row in enumerate(reader):
+                            for y, tile in enumerate(row):
+                                world_data[x][y] = int(tile)
+                        world = World()
+                        player, health_bar = world.process_data(world_data)
+
+
         else:
-            player.update_action(0)  # 0 inseamna IDLE
-
-        screen_scroll = player.move(moving_left, moving_right)
-        bg_scroll -= screen_scroll
+            screen_scroll = 0
+            if death_fade.fade():
+                if restart_button.draw(screen):
+                    death_fade.fade_counter = 0
+                    bg_scroll = 0
+                    world_data = reset_level()
+                    with open(f'level{level}_data.csv', newline='') as csvfile:
+                        reader = csv.reader(csvfile, delimiter=',')
+                        for x, row in enumerate(reader):
+                            for y, tile in enumerate(row):
+                                world_data[x][y] = int(tile)
+                        world = World()
+                        player, health_bar = world.process_data(world_data)
 
 
     for event in pygame.event.get():
@@ -667,6 +809,7 @@ while run:
                 grenade = True
             if event.key == pygame.K_UP and player.alive:
                 player.jump = True
+                jump_fx.play()
             if event.key == pygame.K_ESCAPE:
                 run = False
 
