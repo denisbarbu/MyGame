@@ -12,7 +12,7 @@ screen_width = 1200
 screen_height = 900
 
 screen = pygame.display.set_mode((screen_width, screen_height))
-pygame.display.set_caption("Ninja")
+pygame.display.set_caption("EscapeFromTsushima")
 
 """frame rate"""
 clock = pygame.time.Clock()
@@ -48,15 +48,19 @@ for x in range(tile_types):
 
 
 """sunete si muzica din joc"""
-pygame.mixer.music.load('audio/music2.mp3')
-pygame.mixer.music.set_volume(0.03)
+pygame.mixer.music.load('audio/soundtrack.mp3')
+pygame.mixer.music.set_volume(0.1)
 pygame.mixer.music.play(-1, 0, 5000)
 jump_fx = pygame.mixer.Sound('audio/jump.wav')
-jump_fx.set_volume(0.05)
-shot_fx = pygame.mixer.Sound('audio/shot.wav')
-shot_fx.set_volume(0.05)
+jump_fx.set_volume(0.3)
+shot_fx = pygame.mixer.Sound('audio/shoot.mp3')
+shot_fx.set_volume(0.1)
 grenade_fx = pygame.mixer.Sound('audio/grenade.wav')
-grenade_fx.set_volume(0.05)
+grenade_fx.set_volume(0.5)
+enemy_fx = pygame.mixer.Sound('audio/enemy.mp3')
+enemy_fx.set_volume(0.1)
+
+
 
 
 """incarcare imaginilor"""
@@ -70,9 +74,10 @@ arrow_img = pygame.image.load("img/icons/Icon29.png").convert_alpha()
 grenade_img_info = pygame.image.load("img/icons/grenade1.png").convert_alpha()
 
 """imaginile cu butoanele din joc"""
-start_img = pygame.image.load("img/start_btn.png").convert_alpha()
-exit_img = pygame.image.load("img/exit_btn.png").convert_alpha()
-restart_img = pygame.image.load("img/restart_btn.png").convert_alpha()
+start_img = pygame.image.load("img/start.png").convert_alpha()
+exit_img = pygame.image.load("img/exit.png").convert_alpha()
+restart_img = pygame.image.load("img/replay.png").convert_alpha()
+backround = pygame.image.load("img/backround.png").convert_alpha()
 
 """imaginile pentru backround"""
 pine1_img = pygame.image.load("img/background/pine1.png").convert_alpha()
@@ -93,7 +98,7 @@ red = (255, 0, 0)
 white = (255, 255, 255)
 green = (0, 255, 0)
 black = (0, 0, 0)
-pink = (235, 65, 54)
+pink = (85, 65, 54)
 
 
 def draw_text(text, font, text_col, x, y):
@@ -286,6 +291,7 @@ class Ninja(pygame.sprite.Sprite):
                 # nu mai fuge si trage in player
                 self.update_action(0)
                 self.shoot()
+
             else:
                 if self.idling == False:
                     if self.direction == 1:
@@ -619,7 +625,7 @@ class ScreenFade():
 
     def fade(self):
         fade_complete = False
-        self.fade_counter += self.speed
+        self.fade_counter += self.speed + 2
         if self.direction == 1:
             pygame.draw.rect(screen, self.colour, (0 - self.fade_counter, 0, screen_width // 2, screen_height))
             pygame.draw.rect(screen, self.colour, (screen_width // 2 + self.fade_counter, 0, screen_width, screen_height))
@@ -638,9 +644,9 @@ intro_fade = ScreenFade(1, black, 4)
 death_fade = ScreenFade(2, pink, 4)
 
 #cream butoanele
-start_button = button.Button(screen_width // 2 - 130, screen_height // 2 - 150, start_img, 1)
-exit_button = button.Button(screen_width // 2 - 110, screen_height // 2 + 50, exit_img, 1)
-restart_button = button.Button(screen_width // 2 - 100, screen_height // 2 - 50, restart_img, 2)
+start_button = button.Button(screen_width // 2 - 120, screen_height // 2 - 10, start_img, 1)
+exit_button = button.Button(screen_width // 2 - 120, screen_height // 2 + 100, exit_img, 1)
+restart_button = button.Button(screen_width // 2 - 120, screen_height // 2 - 50, restart_img, 1)
 
 
 
@@ -683,6 +689,7 @@ while run:
     clock.tick(FPS)
     if start_game == False:
         screen.fill(BG)
+        screen.blit(backround,(0, 0))
         if start_button.draw(screen):
             start_game = True
             start_intro = True
@@ -778,6 +785,7 @@ while run:
 
         else:
             screen_scroll = 0
+
             if death_fade.fade():
                 if restart_button.draw(screen):
                     death_fade.fade_counter = 0
